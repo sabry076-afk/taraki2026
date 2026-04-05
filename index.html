@@ -250,6 +250,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <div class="form-group"><label>التاريخ</label><input type="date" id="txDate"></div>
     </div>
     <div class="form-group"><label>ملاحظات (اختياري)</label><textarea id="txNote" rows="2"></textarea></div>
+    <div class="form-group"><label>صورة إيصال الدفع (اختياري)</label><input type="file" id="txReceipt" accept="image/*" onchange="previewReceipt(this,'txReceiptPreview')" style="padding:.5rem"><div id="txReceiptPreview" style="margin-top:.5rem"></div></div>
     <div id="txErr" class="error-msg"></div>
     <button class="btn btn-success" onclick="saveTx()">حفظ العملية</button>
   </div>
@@ -292,6 +293,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <div class="form-group"><label>التاريخ</label><input type="date" id="etx_date"></div>
     </div>
     <div class="form-group"><label>ملاحظات (اختياري)</label><textarea id="etx_note" rows="2"></textarea></div>
+    <div class="form-group"><label>صورة إيصال الدفع (اختياري)</label><input type="file" id="etxReceipt" accept="image/*" onchange="previewReceipt(this,'etxReceiptPreview')" style="padding:.5rem"><div id="etxReceiptPreview" style="margin-top:.5rem"></div></div>
     <div id="etxErr" class="error-msg"></div>
     <button class="btn btn-success" onclick="saveEditTx()">حفظ التعديلات</button>
   </div>
@@ -790,6 +792,7 @@ function openDetail(id) {
   html += '</div>';
 
   if (canEdit) html += '<button class="btn btn-success" style="margin-bottom:1rem" onclick="closeModal(\'boatDetailModal\');openAddTx(' + id + ')">+ تسجيل عملية</button>';
+  html += '<button class="btn" style="margin-bottom:1rem;background:rgba(26,188,156,.15);color:#1abc9c;border:1px solid #1abc9c" onclick="showPaymentReceipts(' + id + ')">تقرير المدفوعات والإيصالات</button>';
   if (b.phone) {
     html += '<button class="btn" style="margin-bottom:1rem;background:rgba(37,211,102,.15);color:#25d366;border:1px solid #25d366" onclick="sendBoatStatementWhatsApp(' + id + ')">إرسال كشف حساب واتساب</button>';
   }
@@ -810,7 +813,9 @@ function openDetail(id) {
       html += '<div class="tx-item ' + t.type + '">' +
         '<div style="flex:1"><div class="tx-label">' + t.desc + (t.auto ? ' <small style="color:var(--gray)">⚙</small>' : '') + '</div>' +
         '<div class="tx-date">' + fmtDate(t.date) + (t.notes && !t.auto ? ' · ' + t.notes : '') + '</div>' +
-        '<div style="font-size:.7rem;color:var(--gray)">رصيد: ' + fmtMoney(run) + '</div></div>' +
+        '<div style="font-size:.7rem;color:var(--gray)">رصيد: ' + fmtMoney(run) + '</div>' +
+        (t.receipt ? '<div style="margin-top:.3rem"><img src="' + t.receipt + '" onclick="viewReceiptFull(this.src)" style="max-width:60px;max-height:45px;border-radius:4px;cursor:pointer;border:1px solid var(--gray)" title="اضغط لعرض الإيصال"> <small style="color:var(--aqua)">📎 إيصال</small></div>' : '') +
+        '</div>' +
         '<div style="display:flex;align-items:center;gap:.4rem">' +
         '<span style="color:' + (t.type === 'charge' ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' + fmtMoney(t.amount) + '</span>' +
         (isAdmin ? '<button onclick="openEditTx(' + t.id + ',' + id + ')" style="background:none;border:none;color:var(--aqua);font-size:.85rem;cursor:pointer;padding:.2rem" title="تعديل">✎</button>' : '') +
@@ -838,6 +843,76 @@ function deleteTx(txId, boatId) {
   renderDashboard();
 }
 
+function viewReceiptFull(src) {
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  overlay.onclick = function() { document.body.removeChild(overlay); };
+  var img = document.createElement('img');
+  img.src = src;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 4px 30px rgba(0,0,0,.5)';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
+function showPaymentReceipts(boatId) {
+  var b = null;
+  db.boats.forEach(function(x) { if (x.id === boatId) b = x; });
+  if (!b) return;
+  var payments = db.transactions.filter(function(t) { return t.boatId === boatId && t.type === 'payment'; });
+  payments.sort(function(a, x) { return new Date(x.date) - new Date(a.date); });
+
+  var html = '<div style="font-size:.82rem;color:var(--gray);margin-bottom:1rem;line-height:1.8">';
+  html += '<div><strong>المركب:</strong> ' + b.name + ' &nbsp; <strong>المالك:</strong> ' + b.owner + '</div>';
+  html += '<div><strong>إجمالي المدفوعات:</strong> <span style="color:var(--green)">' + fmtMoney(payments.reduce(function(s, t) { return s + t.amount; }, 0)) + '</span> &nbsp; <strong>عدد الإيصالات:</strong> ' + payments.filter(function(t) { return t.receipt; }).length + ' / ' + payments.length + '</div>';
+  html += '</div>';
+
+  if (!payments.length) {
+    html += '<p style="color:var(--gray);text-align:center;padding:2rem 0">لا توجد مدفوعات مسجلة لهذا المركب</p>';
+  } else {
+    payments.forEach(function(t) {
+      html += '<div style="background:rgba(255,255,255,.03);border-radius:10px;padding:.8rem;margin-bottom:.8rem;border:1px solid rgba(255,255,255,.06)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">';
+      html += '<div><strong style="color:var(--green)">' + fmtMoney(t.amount) + '</strong></div>';
+      html += '<div style="font-size:.78rem;color:var(--gray)">' + fmtDate(t.date) + '</div>';
+      html += '</div>';
+      html += '<div style="font-size:.82rem;margin-bottom:.3rem">' + t.desc + '</div>';
+      if (t.notes) html += '<div style="font-size:.75rem;color:var(--gray)">' + t.notes + '</div>';
+      if (t.receipt) {
+        html += '<div style="margin-top:.5rem;text-align:center"><img src="' + t.receipt + '" onclick="viewReceiptFull(this.src)" style="max-width:100%;max-height:250px;border-radius:8px;cursor:pointer;border:1px solid var(--gray)" title="اضغط لعرض الإيصال بالحجم الكامل"></div>';
+      } else {
+        html += '<div style="margin-top:.4rem;font-size:.75rem;color:var(--gray);font-style:italic">لا يوجد إيصال مرفق</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  document.getElementById('bdTitle').textContent = 'تقرير مدفوعات: ' + b.name;
+  document.getElementById('bdContent').innerHTML = html;
+}
+
+function previewReceipt(input, previewId) {
+  var preview = document.getElementById(previewId);
+  if (input.files && input.files[0]) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:200px;max-height:150px;border-radius:8px;border:1px solid var(--gray)">';
+    };
+    reader.readAsDataURL(input.files[0]);
+  } else {
+    preview.innerHTML = '';
+  }
+}
+
+function readReceiptFile(fileInput, callback) {
+  if (fileInput.files && fileInput.files[0]) {
+    var reader = new FileReader();
+    reader.onload = function(e) { callback(e.target.result); };
+    reader.readAsDataURL(fileInput.files[0]);
+  } else {
+    callback(null);
+  }
+}
+
 function openAddTx(preBoatId) {
   if (!cu || cu.role === 'viewer') { toast('ليس لديك صلاحية'); return; }
   document.getElementById('txDate').value = new Date().toISOString().slice(0, 10);
@@ -845,6 +920,8 @@ function openAddTx(preBoatId) {
   document.getElementById('txAmount').value = '';
   document.getElementById('txNote').value = '';
   document.getElementById('txErr').textContent = '';
+  document.getElementById('txReceipt').value = '';
+  document.getElementById('txReceiptPreview').innerHTML = '';
   if (preBoatId) document.getElementById('txBoat').value = preBoatId;
   openModal('addTxModal');
 }
@@ -861,12 +938,15 @@ function saveTx() {
   if (!desc)                     { err.textContent = 'أدخل البيان'; return; }
   if (!amt || amt <= 0)          { err.textContent = 'أدخل مبلغاً صحيحاً'; return; }
   if (!date)                     { err.textContent = 'اختر التاريخ'; return; }
-  db.transactions.push({id: db.nextTxId++, boatId: boatId, type: type, desc: desc, amount: r2(amt), date: date, notes: note, auto: false});
-  saveDB();
-  closeModal('addTxModal');
-  toast('تم حفظ العملية');
-  renderDashboard();
-  renderPayments();
+  var fileInput = document.getElementById('txReceipt');
+  readReceiptFile(fileInput, function(receiptData) {
+    db.transactions.push({id: db.nextTxId++, boatId: boatId, type: type, desc: desc, amount: r2(amt), date: date, notes: note, auto: false, receipt: receiptData || ''});
+    saveDB();
+    closeModal('addTxModal');
+    toast('تم حفظ العملية');
+    renderDashboard();
+    renderPayments();
+  });
 }
 
 function renderPayments() {
@@ -1121,6 +1201,13 @@ function openEditTx(txId, boatId) {
   document.getElementById('etx_date').value = tx.date;
   document.getElementById('etx_note').value = tx.notes || '';
   document.getElementById('etxErr').textContent = '';
+  document.getElementById('etxReceipt').value = '';
+  var preview = document.getElementById('etxReceiptPreview');
+  if (tx.receipt) {
+    preview.innerHTML = '<img src="' + tx.receipt + '" style="max-width:200px;max-height:150px;border-radius:8px;border:1px solid var(--gray)"><br><label style="font-size:.75rem;color:var(--gray)">الإيصال الحالي (اختر ملف جديد للتغيير)</label>';
+  } else {
+    preview.innerHTML = '';
+  }
   closeModal('boatDetailModal');
   openModal('editTxModal');
 }
@@ -1137,17 +1224,21 @@ function saveEditTx() {
   if (!desc)            { err.textContent = 'أدخل البيان'; return; }
   if (!amt || amt <= 0) { err.textContent = 'أدخل مبلغاً صحيحاً'; return; }
   if (!date)            { err.textContent = 'اختر التاريخ'; return; }
-  db.transactions.forEach(function(t) {
-    if (t.id === txId) {
-      t.type = type; t.desc = desc; t.amount = r2(amt); t.date = date; t.notes = note;
-    }
+  var fileInput = document.getElementById('etxReceipt');
+  readReceiptFile(fileInput, function(receiptData) {
+    db.transactions.forEach(function(t) {
+      if (t.id === txId) {
+        t.type = type; t.desc = desc; t.amount = r2(amt); t.date = date; t.notes = note;
+        if (receiptData) t.receipt = receiptData;
+      }
+    });
+    saveDB();
+    closeModal('editTxModal');
+    toast('تم تعديل المعاملة');
+    renderDashboard();
+    renderPayments();
+    openDetail(boatId);
   });
-  saveDB();
-  closeModal('editTxModal');
-  toast('تم تعديل المعاملة');
-  renderDashboard();
-  renderPayments();
-  openDetail(boatId);
 }
 
 function getReportData() {
@@ -1374,4 +1465,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 </body>
-</html>                                                                                        
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
