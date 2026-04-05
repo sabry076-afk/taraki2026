@@ -82,7 +82,15 @@ tr:hover td{background:rgba(255,255,255,.03)}
 .filter-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
 .auto-banner{background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(6,182,212,.08));border:1px solid rgba(16,185,129,.35);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:.8rem}
+.actions-row{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
+.btn-outline{background:none;border:1.5px solid var(--teal);color:var(--aqua);border-radius:8px;padding:.5rem 1rem;font-size:.82rem;cursor:pointer;font-family:inherit;font-weight:600;transition:background .2s}
+.btn-outline:hover{background:rgba(14,116,144,.15)}
+.btn-outline-danger{border-color:var(--red);color:var(--red)}
+.btn-outline-danger:hover{background:rgba(239,68,68,.1)}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -176,12 +184,20 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <div class="card-title">تقرير شامل</div>
       <div class="form-group"><label>اختر مركب</label><select id="rptBoat"><option value="all">جميع المراكب</option></select></div>
       <button class="btn" onclick="generateReport()">عرض التقرير</button>
+      <div class="actions-row" style="margin-top:.8rem">
+        <button class="btn-outline" onclick="exportReportPDF()">تصدير PDF</button>
+        <button class="btn-outline" onclick="exportReportExcel()">تصدير Excel</button>
+      </div>
     </div>
     <div id="rptResult"></div>
     <div class="card" style="margin-top:1rem">
       <div class="card-title">كشف حساب مركب</div>
       <div class="form-group"><label>المركب</label><select id="stmtBoat"><option value="">اختر مركب...</option></select></div>
       <button class="btn btn-gold" onclick="showStatement()">عرض كشف الحساب</button>
+      <div class="actions-row" style="margin-top:.8rem">
+        <button class="btn-outline" onclick="exportStatementPDF()">تصدير كشف PDF</button>
+        <button class="btn-outline" onclick="exportStatementExcel()">تصدير كشف Excel</button>
+      </div>
     </div>
     <div id="stmtResult"></div>
   </div>
@@ -235,6 +251,48 @@ tr:hover td{background:rgba(255,255,255,.03)}
     <div class="form-group"><label>ملاحظات (اختياري)</label><textarea id="txNote" rows="2"></textarea></div>
     <div id="txErr" class="error-msg"></div>
     <button class="btn btn-success" onclick="saveTx()">حفظ العملية</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="editBoatModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('editBoatModal')">&times;</button>
+    <div class="modal-title">تعديل بيانات المركب</div>
+    <input type="hidden" id="eb_id">
+    <div class="form-group"><label>اسم المركب</label><input type="text" id="eb_name"></div>
+    <div class="form-group"><label>اسم المستثمر / المالك</label><input type="text" id="eb_owner"></div>
+    <div class="form-group"><label>رقم الهاتف</label><input type="text" id="eb_phone"></div>
+    <div class="two-col">
+      <div class="form-group"><label>المساحة (م)</label><input type="number" id="eb_area" step="0.01"></div>
+      <div class="form-group"><label>سعر المتر (جنيه)</label><input type="number" id="eb_price"></div>
+    </div>
+    <div class="two-col">
+      <div class="form-group"><label>تاريخ البداية</label><input type="date" id="eb_start"></div>
+      <div class="form-group"><label>تاريخ النهاية (اختياري)</label><input type="date" id="eb_end"></div>
+    </div>
+    <div class="form-group"><label>التأمين (اختياري)</label><input type="number" id="eb_deposit" step="0.01"></div>
+    <div id="ebErr" class="error-msg"></div>
+    <button class="btn btn-success" onclick="saveEditBoat()">حفظ التعديلات</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="editTxModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('editTxModal')">&times;</button>
+    <div class="modal-title">تعديل المعاملة</div>
+    <input type="hidden" id="etx_id">
+    <input type="hidden" id="etx_boatId">
+    <div class="form-group"><label>نوع العملية</label>
+      <select id="etx_type"><option value="charge">استحقاق إيجار</option><option value="payment">دفع / تحصيل</option></select>
+    </div>
+    <div class="form-group"><label>البيان</label><input type="text" id="etx_desc"></div>
+    <div class="two-col">
+      <div class="form-group"><label>المبلغ (جنيه)</label><input type="number" id="etx_amount" min="0.01" step="0.01"></div>
+      <div class="form-group"><label>التاريخ</label><input type="date" id="etx_date"></div>
+    </div>
+    <div class="form-group"><label>ملاحظات (اختياري)</label><textarea id="etx_note" rows="2"></textarea></div>
+    <div id="etxErr" class="error-msg"></div>
+    <button class="btn btn-success" onclick="saveEditTx()">حفظ التعديلات</button>
   </div>
 </div>
 
@@ -667,6 +725,12 @@ function openDetail(id) {
   html += '</div>';
 
   if (canEdit) html += '<button class="btn btn-success" style="margin-bottom:1rem" onclick="closeModal(\'boatDetailModal\');openAddTx(' + id + ')">+ تسجيل عملية</button>';
+  if (isAdmin) {
+    html += '<div class="actions-row">';
+    html += '<button class="btn-outline" onclick="openEditBoat(' + id + ')">تعديل بيانات المركب</button>';
+    html += '<button class="btn-outline btn-outline-danger" onclick="deleteBoat(' + id + ')">حذف المركب</button>';
+    html += '</div>';
+  }
 
   html += '<div style="font-weight:700;color:var(--aqua);margin-bottom:.6rem">المعاملات (' + txs.length + ')</div>';
   if (!txs.length) {
@@ -681,7 +745,8 @@ function openDetail(id) {
         '<div style="font-size:.7rem;color:var(--gray)">رصيد: ' + fmtMoney(run) + '</div></div>' +
         '<div style="display:flex;align-items:center;gap:.4rem">' +
         '<span style="color:' + (t.type === 'charge' ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' + fmtMoney(t.amount) + '</span>' +
-        (isAdmin ? '<button onclick="deleteTx(' + t.id + ',' + id + ')" style="background:none;border:none;color:var(--red);font-size:1rem;cursor:pointer;padding:.2rem">X</button>' : '') +
+        (isAdmin ? '<button onclick="openEditTx(' + t.id + ',' + id + ')" style="background:none;border:none;color:var(--aqua);font-size:.85rem;cursor:pointer;padding:.2rem" title="تعديل">✎</button>' : '') +
+        (isAdmin ? '<button onclick="deleteTx(' + t.id + ',' + id + ')" style="background:none;border:none;color:var(--red);font-size:1rem;cursor:pointer;padding:.2rem" title="حذف">X</button>' : '') +
         '</div></div>';
     });
   }
@@ -909,6 +974,225 @@ function resetAutoLog() {
   document.getElementById('autoLogPanel').innerHTML = '';
 }
 
+function deleteBoat(id) {
+  if (!cu || cu.role !== 'admin') { toast('ليس لديك صلاحية'); return; }
+  if (!confirm('هل أنت متأكد من حذف هذا المركب وجميع معاملاته؟\nهذا الإجراء لا يمكن التراجع عنه.')) return;
+  db.boats = db.boats.filter(function(b) { return b.id !== id; });
+  db.transactions = db.transactions.filter(function(t) { return t.boatId !== id; });
+  if (db.autoLog[id]) delete db.autoLog[id];
+  saveDB();
+  closeModal('boatDetailModal');
+  toast('تم حذف المركب');
+  populateSelects();
+  renderBoats();
+  renderDashboard();
+}
+
+function openEditBoat(id) {
+  if (!cu || cu.role !== 'admin') { toast('ليس لديك صلاحية'); return; }
+  var b = null;
+  db.boats.forEach(function(x) { if (x.id === id) b = x; });
+  if (!b) return;
+  document.getElementById('eb_id').value = id;
+  document.getElementById('eb_name').value = b.name;
+  document.getElementById('eb_owner').value = b.owner;
+  document.getElementById('eb_phone').value = b.phone || '';
+  document.getElementById('eb_area').value = b.area;
+  document.getElementById('eb_price').value = b.pricePerM;
+  document.getElementById('eb_start').value = b.start;
+  document.getElementById('eb_end').value = b.end || '';
+  document.getElementById('eb_deposit').value = b.deposit || '';
+  document.getElementById('ebErr').textContent = '';
+  closeModal('boatDetailModal');
+  openModal('editBoatModal');
+}
+
+function saveEditBoat() {
+  var id = parseInt(document.getElementById('eb_id').value);
+  var name  = document.getElementById('eb_name').value.trim();
+  var owner = document.getElementById('eb_owner').value.trim();
+  var phone = document.getElementById('eb_phone').value.trim();
+  var area  = parseFloat(document.getElementById('eb_area').value);
+  var price = parseFloat(document.getElementById('eb_price').value);
+  var start = document.getElementById('eb_start').value;
+  var end   = document.getElementById('eb_end').value;
+  var dep   = parseFloat(document.getElementById('eb_deposit').value || 0);
+  var err   = document.getElementById('ebErr');
+  if (!name)      { err.textContent = 'أدخل اسم المركب'; return; }
+  if (!owner)     { err.textContent = 'أدخل اسم المالك'; return; }
+  if (!(area>0))  { err.textContent = 'أدخل المساحة'; return; }
+  if (!(price>0)) { err.textContent = 'أدخل سعر المتر'; return; }
+  if (!start)     { err.textContent = 'أدخل تاريخ البداية'; return; }
+  var dup = false; db.boats.forEach(function(b) { if (b.name === name && b.id !== id) dup = true; });
+  if (dup) { err.textContent = 'هذا الاسم موجود مسبقاً'; return; }
+  db.boats.forEach(function(b) {
+    if (b.id === id) {
+      b.name = name; b.owner = owner; b.phone = phone;
+      b.area = r2(area); b.pricePerM = price; b.monthlyRent = r2(area * price);
+      b.start = start; b.end = end || ''; b.deposit = r2(dep || 0);
+    }
+  });
+  saveDB();
+  closeModal('editBoatModal');
+  toast('تم تعديل بيانات المركب');
+  populateSelects();
+  renderBoats();
+  renderDashboard();
+}
+
+function openEditTx(txId, boatId) {
+  if (!cu || cu.role !== 'admin') { toast('ليس لديك صلاحية'); return; }
+  var tx = null;
+  db.transactions.forEach(function(t) { if (t.id === txId) tx = t; });
+  if (!tx) return;
+  document.getElementById('etx_id').value = txId;
+  document.getElementById('etx_boatId').value = boatId;
+  document.getElementById('etx_type').value = tx.type;
+  document.getElementById('etx_desc').value = tx.desc;
+  document.getElementById('etx_amount').value = tx.amount;
+  document.getElementById('etx_date').value = tx.date;
+  document.getElementById('etx_note').value = tx.notes || '';
+  document.getElementById('etxErr').textContent = '';
+  closeModal('boatDetailModal');
+  openModal('editTxModal');
+}
+
+function saveEditTx() {
+  var txId = parseInt(document.getElementById('etx_id').value);
+  var boatId = parseInt(document.getElementById('etx_boatId').value);
+  var type = document.getElementById('etx_type').value;
+  var desc = document.getElementById('etx_desc').value.trim();
+  var amt = parseFloat(document.getElementById('etx_amount').value);
+  var date = document.getElementById('etx_date').value;
+  var note = document.getElementById('etx_note').value.trim();
+  var err = document.getElementById('etxErr');
+  if (!desc)            { err.textContent = 'أدخل البيان'; return; }
+  if (!amt || amt <= 0) { err.textContent = 'أدخل مبلغاً صحيحاً'; return; }
+  if (!date)            { err.textContent = 'اختر التاريخ'; return; }
+  db.transactions.forEach(function(t) {
+    if (t.id === txId) {
+      t.type = type; t.desc = desc; t.amount = r2(amt); t.date = date; t.notes = note;
+    }
+  });
+  saveDB();
+  closeModal('editTxModal');
+  toast('تم تعديل المعاملة');
+  renderDashboard();
+  renderPayments();
+  openDetail(boatId);
+}
+
+function getReportData() {
+  var val = document.getElementById('rptBoat').value;
+  var boats = val === 'all' ? db.boats.filter(function(b) { return b.active; }) : db.boats.filter(function(b) { return b.id === parseInt(val); });
+  var rows = [];
+  var totC = 0, totP = 0;
+  boats.forEach(function(b) {
+    var bal = getBalance(b.id);
+    totC += bal.charged; totP += bal.paid;
+    var st = bal.remaining > 0.005 ? 'متأخر' : bal.remaining < -0.005 ? 'مقدم' : 'مسدد';
+    rows.push({name: b.name, owner: b.owner, monthly: b.monthlyRent, charged: bal.charged, paid: bal.paid, remaining: Math.abs(bal.remaining), status: st});
+  });
+  return {rows: rows, totC: r2(totC), totP: r2(totP), totR: r2(Math.abs(totC - totP)), count: boats.length};
+}
+
+function getStatementData() {
+  var id = parseInt(document.getElementById('stmtBoat').value);
+  if (!id) return null;
+  var b = null; db.boats.forEach(function(x) { if (x.id === id) b = x; });
+  if (!b) return null;
+  var bal = getBalance(id);
+  var txs = db.transactions.filter(function(t) { return t.boatId === id; }).sort(function(a, x) { return new Date(a.date) - new Date(x.date); });
+  var run = 0;
+  var rows = txs.map(function(t, i) {
+    run = r2(run + (t.type === 'charge' ? t.amount : -t.amount));
+    return {num: i+1, date: t.date, desc: t.desc + (t.auto ? ' ⚙' : ''), debit: t.type === 'charge' ? t.amount : 0, credit: t.type === 'payment' ? t.amount : 0, balance: run};
+  });
+  return {boat: b, bal: bal, rows: rows};
+}
+
+function exportReportPDF() {
+  var data = getReportData();
+  if (!data.rows.length) { toast('لا توجد بيانات للتصدير'); return; }
+  var doc = new jspdf.jsPDF({orientation: 'landscape'});
+  doc.setFont('helvetica');
+  doc.setFontSize(16);
+  doc.text('Taraki Marina - Report', 148, 15, {align: 'center'});
+  doc.setFontSize(10);
+  doc.text('Date: ' + new Date().toLocaleDateString('en'), 148, 22, {align: 'center'});
+  var head = [['#', 'Boat', 'Owner', 'Monthly', 'Charged', 'Paid', 'Balance', 'Status']];
+  var body = data.rows.map(function(r, i) {
+    return [i+1, r.name, r.owner, r.monthly.toFixed(2), r.charged.toFixed(2), r.paid.toFixed(2), r.remaining.toFixed(2), r.status];
+  });
+  body.push(['', 'Total (' + data.count + ')', '', '', data.totC.toFixed(2), data.totP.toFixed(2), data.totR.toFixed(2), '']);
+  doc.autoTable({head: head, body: body, startY: 28, styles: {fontSize: 8, cellPadding: 3}, headStyles: {fillColor: [26, 58, 92]}, alternateRowStyles: {fillColor: [240, 245, 250]}});
+  doc.save('taraki_report_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  toast('تم تصدير التقرير PDF');
+}
+
+function exportReportExcel() {
+  var data = getReportData();
+  if (!data.rows.length) { toast('لا توجد بيانات للتصدير'); return; }
+  var wsData = [['#', 'المركب', 'المالك', 'إيجار/شهر', 'المستحق', 'المسدد', 'الرصيد', 'الحالة']];
+  data.rows.forEach(function(r, i) {
+    wsData.push([i+1, r.name, r.owner, r.monthly, r.charged, r.paid, r.remaining, r.status]);
+  });
+  wsData.push(['', 'الإجمالي (' + data.count + ' مركب)', '', '', data.totC, data.totP, data.totR, '']);
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:5},{wch:20},{wch:25},{wch:12},{wch:12},{wch:12},{wch:12},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Report');
+  XLSX.writeFile(wb, 'taraki_report_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  toast('تم تصدير التقرير Excel');
+}
+
+function exportStatementPDF() {
+  var data = getStatementData();
+  if (!data) { toast('اختر مركباً أولاً'); return; }
+  var doc = new jspdf.jsPDF();
+  doc.setFont('helvetica');
+  doc.setFontSize(14);
+  doc.text('Taraki Marina - Account Statement', 105, 15, {align: 'center'});
+  doc.setFontSize(10);
+  doc.text('Boat: ' + data.boat.name + '  |  Owner: ' + data.boat.owner, 105, 23, {align: 'center'});
+  doc.text('Monthly Rent: ' + data.boat.monthlyRent.toFixed(2) + ' EGP', 105, 29, {align: 'center'});
+  if (data.boat.phone) doc.text('Phone: ' + data.boat.phone, 105, 35, {align: 'center'});
+  var head = [['#', 'Date', 'Description', 'Debit', 'Credit', 'Balance']];
+  var body = data.rows.map(function(r) {
+    return [r.num, r.date, r.desc, r.debit ? r.debit.toFixed(2) : '-', r.credit ? r.credit.toFixed(2) : '-', r.balance.toFixed(2)];
+  });
+  body.push(['', '', 'Total', data.bal.charged.toFixed(2), data.bal.paid.toFixed(2), data.bal.remaining.toFixed(2)]);
+  doc.autoTable({head: head, body: body, startY: data.boat.phone ? 40 : 34, styles: {fontSize: 8, cellPadding: 3}, headStyles: {fillColor: [26, 58, 92]}, alternateRowStyles: {fillColor: [240, 245, 250]}});
+  doc.save('taraki_statement_' + data.boat.name + '_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  toast('تم تصدير كشف الحساب PDF');
+}
+
+function exportStatementExcel() {
+  var data = getStatementData();
+  if (!data) { toast('اختر مركباً أولاً'); return; }
+  var wsData = [
+    ['الميناء السياحي - التراكي'],
+    ['كشف حساب'],
+    ['المركب: ' + data.boat.name, '', 'المالك: ' + data.boat.owner],
+    ['الإيجار الشهري: ' + data.boat.monthlyRent.toFixed(2) + ' ج.م', '', 'الهاتف: ' + (data.boat.phone || '-')],
+    [],
+    ['#', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الرصيد']
+  ];
+  data.rows.forEach(function(r) {
+    wsData.push([r.num, r.date, r.desc, r.debit || '', r.credit || '', r.balance]);
+  });
+  wsData.push([]);
+  wsData.push(['', '', 'المستحق', data.bal.charged]);
+  wsData.push(['', '', 'المسدد', data.bal.paid]);
+  wsData.push(['', '', 'المتبقي', data.bal.remaining]);
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:5},{wch:14},{wch:25},{wch:12},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Statement');
+  XLSX.writeFile(wb, 'taraki_statement_' + data.boat.name + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  toast('تم تصدير كشف الحساب Excel');
+}
+
 function exportData() {
   var blob = new Blob([JSON.stringify(db, null, 2)], {type: 'application/json'});
   var a = document.createElement('a');
@@ -962,4 +1246,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 </body>
-</html>l 
+</html>    
